@@ -304,7 +304,7 @@ class WorkerClass:
         opt.ell = res.x
         opt.c   = self.post_tax_income_top(p, opt.ell)
         opt.U   = self.utility(opt.c, opt.ell)
-        return opt */
+        return opt 
 
     # ------------------------------------------------------------------
     # Optimal choice with top tax using 4-step FOC (with region label)
