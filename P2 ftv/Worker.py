@@ -309,8 +309,8 @@ class WorkerClass:
     # ------------------------------------------------------------------
     # Optimal choice with top tax using 4-step FOC (with region label)
     # ------------------------------------------------------------------
-    
-    def optimal_choice_top_FOC_region(self, p):
+        
+    def optimal_choice_top_FOC(self, p):
 
         par = self.par
         opt = SimpleNamespace()
@@ -340,7 +340,7 @@ class WorkerClass:
                 U_b = -1e10
                 ell_b = None
 
-        # ---------- STEP 2  ----------
+        # ---------- STEP 2 ----------
         U_k = -1e10
         ell_k_feasible = None
 
@@ -378,14 +378,13 @@ class WorkerClass:
         ell_star = ell_candidates[idx_best]
 
         if (ell_star is None) or (U_star <= -1e9):
-            # fallback: corner solution at ell_max
             ell_star = ell_max
             c_star = self.post_tax_income_top(p, ell_star)
             U_star = self.utility(c_star, ell_star)
             region = 'corner'
         else:
             c_star = self.post_tax_income_top(p, ell_star)
-            region = ['b','k','a'][idx_best]  # before / kink / after
+            region = ['b','k','a'][idx_best]
 
         opt.ell = ell_star
         opt.c   = c_star
@@ -393,6 +392,7 @@ class WorkerClass:
         opt.region = region
 
         return opt
+
 
     # ------------------------------------------------------------------
     # Plot under top tax system (utility + FOC before + FOC after)
@@ -463,5 +463,70 @@ class WorkerClass:
 
         plt.tight_layout()
         plt.show()
+    
+    # ------------------------------------------------------------------
+    # Labor supply and consumption under top tax 
+    # ------------------------------------------------------------------
+    def compute_labor_supply_top(self):
+
+        par = self.par
+        ps = par.ps
+
+        ell_star = np.zeros_like(ps)
+        c_star   = np.zeros_like(ps)
+        regions  = np.empty(ps.shape, dtype=object)
+
+        for i, p in enumerate(ps):
+            opt = self.optimal_choice_top_FOC(p)
+            ell_star[i] = opt.ell
+            c_star[i]   = opt.c
+            regions[i]  = opt.region
+
+        return ps, ell_star, c_star, regions
+
+    # ------------------------------------------------------------------
+    # Proportions in each region (b, k, a)
+    # ------------------------------------------------------------------
+    def region_proportions_top(self):
+
+        _, _, _, regions = self.compute_labor_supply_top()
+
+        share_b = np.mean(regions == 'b')
+        share_k = np.mean(regions == 'k')
+        share_a = np.mean(regions == 'a')
+
+        print(f"Share with ℓ* = ℓ^b (before kink): {share_b:.3f}")
+        print(f"Share with ℓ* = ℓ^k (at kink):      {share_k:.3f}")
+        print(f"Share with ℓ* = ℓ^a (after kink):   {share_a:.3f}")
+
+        # hvis du vil bruge dem i notebooken
+        return share_b, share_k, share_a
+    
+    # ------------------------------------------------------------------
+    # Plot for 3.2.1: ℓ*(p) and c(p)
+    # ------------------------------------------------------------------
+    def plot_labor_and_consumption_top(self):
+
+        ps, ell_star, c_star, _ = self.compute_labor_supply_top()
+
+        fig, ax = plt.subplots(1, 2, figsize=(12,4))
+
+        ax[0].plot(ps, ell_star)
+        ax[0].set_title("Optimal labor supply ℓ*(p)")
+        ax[0].set_xlabel("Productivity p")
+        ax[0].set_ylabel("Labor supply ℓ*")
+        ax[0].grid(True)
+
+        # --- Plot c(p)
+        ax[1].plot(ps, c_star)
+        ax[1].set_title("Consumption c(p) = y(p, ℓ*(p))")
+        ax[1].set_xlabel("Productivity p")
+        ax[1].set_ylabel("Consumption c")
+        ax[1].grid(True)
+
+        plt.tight_layout()
+        plt.show()
+
+
     
     
