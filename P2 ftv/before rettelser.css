@@ -250,25 +250,24 @@ class WorkerClass:
         plt.show()
 
     
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ 
     # Top tax (Assignment part 3)
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ 
 
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ 
     # Post tax income top
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ 
     def post_tax_income_top(self, p, ell):
         par = self.par
 
-        pre_tax = self.income(p, ell)
+        pre_tax = self.income(p, ell)             
         top_base = np.maximum(pre_tax - par.kappa, 0.0)
 
         tax = par.tau * pre_tax + par.omega * top_base + par.zeta
+        
         return pre_tax - tax
-
-
     # ------------------------------------------------------------------
-    # FOC before and after
+    # FOC before and after 
     # ------------------------------------------------------------------
 
     def FOC_top_before(self, p, ell):
@@ -278,7 +277,6 @@ class WorkerClass:
             return 1e6
         return (1 - par.tau) * par.w * p / c - par.nu * ell**par.epsilon
 
-
     def FOC_top_after(self, p, ell):
         par = self.par
         c = self.post_tax_income_top(p, ell)
@@ -286,64 +284,11 @@ class WorkerClass:
             return 1e6
         return (1 - par.tau - par.omega) * par.w * p / c - par.nu * ell**par.epsilon
 
-
     # ------------------------------------------------------------------
-    # NEW: Minimum ell for positive consumption under top tax (piecewise)
-    # ------------------------------------------------------------------
-    def get_min_ell_top(self, p, region):
-        """
-        Minimum ell to ensure c>0 in the given region.
-        region: 'before' (ell < ell_k) or 'after' (ell >= ell_k)
-        """
-        par = self.par
-        w = par.w
-        ell_k = par.kappa / (w * p)
-
-        if region == 'before':
-            # c = (1-tau) w p ell - zeta
-            denom = (1 - par.tau) * w * p
-            if denom <= 0:
-                return np.inf
-            ell_min = par.zeta / denom
-            return max(ell_min, 0.0) + 1e-10
-
-        elif region == 'after':
-            # for ell>=ell_k: c = (1-tau-omega) w p ell + omega*kappa - zeta
-            denom = (1 - par.tau - par.omega) * w * p
-            if denom <= 0:
-                return np.inf
-            ell_min = (par.zeta - par.omega * par.kappa) / denom
-            return max(ell_k, ell_min, 0.0) + 1e-10
-
-        else:
-            raise ValueError("region must be 'before' or 'after'")
-
-
-    # ------------------------------------------------------------------
-    # NEW: Safe bisection root finder (checks sign change)
-    # ------------------------------------------------------------------
-    def safe_bisect_root(self, f, a, b):
-        fa = f(a)
-        fb = f(b)
-
-        if not np.isfinite(fa) or not np.isfinite(fb):
-            return None
-        if fa == 0:
-            return a
-        if fb == 0:
-            return b
-        if fa * fb > 0:
-            return None  # no sign change => bisection invalid
-
-        res = root_scalar(f, bracket=(a, b), method="bisect")
-        return res.root
-
-
-    # ------------------------------------------------------------------
-    # Optimal choice with top tax (direct maximization)
+    # Optimal choice with top tax
     # ------------------------------------------------------------------
     def optimal_choice_top(self, p):
-
+        
         par = self.par
         opt = SimpleNamespace()
 
@@ -351,11 +296,7 @@ class WorkerClass:
             c = self.post_tax_income_top(p, ell)
             return -self.utility(c, ell)
 
-        # IMPORTANT: use top-tax positivity bound (most robust)
-        ell_min = 0.0
-        # if zeta>0, ensure c>0 at least in the "before" region
-        ell_min = max(ell_min, self.get_min_ell_top(p, region="before"))
-
+        ell_min = self.get_min_ell(p)
         ell_max = par.ell_max
 
         res = minimize_scalar(obj, bounds=(ell_min, ell_max), method='bounded')
@@ -363,90 +304,87 @@ class WorkerClass:
         opt.ell = res.x
         opt.c   = self.post_tax_income_top(p, opt.ell)
         opt.U   = self.utility(opt.c, opt.ell)
-        return opt
-
+        return opt 
 
     # ------------------------------------------------------------------
     # Optimal choice with top tax using 4-step FOC (with region label)
     # ------------------------------------------------------------------
+        
     def optimal_choice_top_FOC(self, p):
 
         par = self.par
         opt = SimpleNamespace()
 
+        ell_min = self.get_min_ell(p)
         ell_max = par.ell_max
-        w = par.w
-        ell_k = par.kappa / (w * p)
-        eps = 1e-8
 
-        # ---------- Candidate: ell = 0 (often relevant when zeta <= 0) ----------
-        U0 = -np.inf
-        ell0 = 0.0
-        c0 = self.post_tax_income_top(p, ell0)
-        if c0 > 0:
-            U0 = self.utility(c0, ell0)
+        ell_k = par.kappa / (par.w * p)
+        eps = 1e-6 
 
-        # ---------- STEP 1: root before kink ----------
-        Ub, ell_b = -np.inf, None
+        # ---------- STEP 1 ----------
+        U_b = -1e10
+        ell_b = None
+
         upper_1 = min(ell_k - eps, ell_max)
+        if upper_1 > ell_min:
 
-        ell_min_before = self.get_min_ell_top(p, region="before")
-        if ell_min_before < upper_1:
-            f_before = lambda ell: self.FOC_top_before(p, ell)
-            root_b = self.safe_bisect_root(f_before, ell_min_before, upper_1)
-            if root_b is not None:
-                ell_b = root_b
-                cb = self.post_tax_income_top(p, ell_b)
-                if cb > 0:
-                    Ub = self.utility(cb, ell_b)
+            def obj_before(ell):
+                return self.FOC_top_before(p, ell)
 
-        # ---------- STEP 2: kink ----------
-        Uk, ell_k_feasible = -np.inf, None
-        if 0.0 <= ell_k <= ell_max:
-            ck = self.post_tax_income_top(p, ell_k)
-            if ck > 0:
-                Uk = self.utility(ck, ell_k)
+            try:
+                res1 = root_scalar(obj_before, bracket=(ell_min, upper_1), method='bisect')
+                ell_b = res1.root
+                c_b = self.post_tax_income_top(p, ell_b)
+                U_b = self.utility(c_b, ell_b)
+            except ValueError:
+                U_b = -1e10
+                ell_b = None
+
+        # ---------- STEP 2 ----------
+        U_k = -1e10
+        ell_k_feasible = None
+
+        if (ell_k >= ell_min) and (ell_k <= ell_max):
+            c_k = self.post_tax_income_top(p, ell_k)
+            if c_k > 0:
+                U_k = self.utility(c_k, ell_k)
                 ell_k_feasible = ell_k
 
-        # ---------- STEP 3: root after kink ----------
-        Ua, ell_a = -np.inf, None
+        # ---------- STEP 3 ----------
+        U_a = -1e10
+        ell_a = None
 
-        lower_3 = max(ell_k + eps, 0.0)
-        ell_min_after = self.get_min_ell_top(p, region="after")
-        lower_3 = max(lower_3, ell_min_after)
-
+        lower_3 = max(ell_k + eps, ell_min)
         if lower_3 < ell_max:
-            f_after = lambda ell: self.FOC_top_after(p, ell)
-            root_a = self.safe_bisect_root(f_after, lower_3, ell_max)
-            if root_a is not None:
-                ell_a = root_a
-                ca = self.post_tax_income_top(p, ell_a)
-                if ca > 0:
-                    Ua = self.utility(ca, ell_a)
 
-        # ---------- Candidate: ell = ell_max ----------
-        Umax = -np.inf
-        cmax = self.post_tax_income_top(p, ell_max)
-        if cmax > 0:
-            Umax = self.utility(cmax, ell_max)
+            def obj_after(ell):
+                return self.FOC_top_after(p, ell)
 
-        # ---------- STEP 4: choose best ----------
-        U_candidates   = [Ub, Uk, Ua, U0, Umax]
-        ell_candidates = [ell_b, ell_k_feasible, ell_a, ell0, ell_max]
-        labels         = ['b', 'k', 'a', '0', 'max']
+            try:
+                res3 = root_scalar(obj_after, bracket=(lower_3, ell_max), method='bisect')
+                ell_a = res3.root
+                c_a = self.post_tax_income_top(p, ell_a)
+                U_a = self.utility(c_a, ell_a)
+            except ValueError:
+                U_a = -1e10
+                ell_a = None
+
+        # ---------- STEP 4 ----------
+        U_candidates = [U_b, U_k, U_a]
+        ell_candidates = [ell_b, ell_k_feasible, ell_a]
 
         idx_best = int(np.argmax(U_candidates))
+        U_star = U_candidates[idx_best]
         ell_star = ell_candidates[idx_best]
-        U_star   = U_candidates[idx_best]
 
-        if (ell_star is None) or (not np.isfinite(U_star)):
+        if (ell_star is None) or (U_star <= -1e9):
             ell_star = ell_max
             c_star = self.post_tax_income_top(p, ell_star)
             U_star = self.utility(c_star, ell_star)
             region = 'corner'
         else:
             c_star = self.post_tax_income_top(p, ell_star)
-            region = labels[idx_best]
+            region = ['b','k','a'][idx_best]
 
         opt.ell = ell_star
         opt.c   = c_star
@@ -455,7 +393,8 @@ class WorkerClass:
 
         return opt
 
-     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
     # Plot under top tax system (utility + FOC before + FOC after)
     # ------------------------------------------------------------------
 
