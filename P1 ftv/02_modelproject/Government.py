@@ -3,17 +3,16 @@ import numpy as np
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 
-
 class GovernmentClass(WorkerClass):
 
     def __init__(self, par=None):
 
-        # default setup
+        # a. default setup
         self.setup_worker()
 
         # Worker parameters that might not exist yet
         if not hasattr(self.par, 'L'):
-            self.par.L = 16.0
+            self.par.L = 16
         if not hasattr(self.par, 'w'):
             self.par.w = 1.0
         if not hasattr(self.par, 'epsilon'):
@@ -44,16 +43,6 @@ class GovernmentClass(WorkerClass):
         par.chi = 50.0      # weight on public good in SWF
         par.eta = 0.1       # curvature of public good in SWF
 
-        # c. taxes (make sure these exist!)
-        if not hasattr(par, 'tau'):
-            par.tau = 0.50
-        if not hasattr(par, 'zeta'):
-            par.zeta = 0.10
-
-        # d. top tax
-        par.kappa = 9.0
-        par.omega = 0.0  # omega=0 means "no top tax"
-
     # --------------------------------------------------------
     # 1. Draw productivities p_i
     # --------------------------------------------------------
@@ -65,56 +54,41 @@ class GovernmentClass(WorkerClass):
         self.sol.pi = self.rng.lognormal(mean=mu, sigma=par.sigma_p, size=par.N)
 
     # --------------------------------------------------------
-    # Top-tax budget pieces
-    # --------------------------------------------------------
-    def income(self, pi, ell):
-        """Pre-tax labor income."""
-        par = self.par
-        return par.w * pi * ell
-
-    def consumption(self, pi, ell):
-        """Consumption under current tax system (incl. top tax)."""
-        par = self.par
-
-        y = self.income(pi, ell)
-        top_base = max(y - par.kappa, 0.0)
-        top_tax = par.omega * top_base
-
-        c = (1 - par.tau) * y - top_tax - par.zeta
-        return c
-
-    def utility_of_ell(self, pi, ell):
-        """Utility as a function of labor ell."""
-        par = self.par
-
-        c = self.consumption(pi, ell)
-        if c <= 0:
-            return -1e12
-
-        return np.log(c) - par.nu * ell ** (1 + par.epsilon) / (1 + par.epsilon)
-
-    # --------------------------------------------------------
     # 2. Solve labor supply for one worker
     # --------------------------------------------------------
     def solve_labor_supply(self, pi):
 
         par = self.par
 
-        ell_min = 0.0
+        # Minimum labor supply ensuring c > 0
+        # Note: protect against division by zero if tau = 1.
+        if (1 - par.tau) * par.w * pi > 0:
+            ell_min = max(par.zeta / ((1 - par.tau) * par.w * pi), 0)
+        else:
+            ell_min = 0
+
         ell_max = par.L
 
-        def objective(x):
-            ell = x[0]
-            return -self.utility_of_ell(pi, ell)
+        # Utility function
+        def utility(ell):
+            c = (1 - par.tau) * par.w * pi * ell - par.zeta
+            if c <= 0:
+                return -1e12
+            return np.log(c) - par.nu * ell ** (1 + par.epsilon) / (1 + par.epsilon)
 
+        # Objective function (negative utility)
+        def objective(x):
+            return -utility(x[0])
+
+        # Optimization
         res = minimize(
             objective,
-            x0=[1.0],
+            x0=[max(0.1, ell_min)],
             bounds=[(ell_min, ell_max)]
         )
 
         ell_opt = res.x[0]
-        U_opt = self.utility_of_ell(pi, ell_opt)
+        U_opt = utility(ell_opt)
 
         return ell_opt, U_opt
 
@@ -143,15 +117,10 @@ class GovernmentClass(WorkerClass):
         par = self.par
         sol = self.sol
 
-        y = par.w * sol.pi * sol.l
-        top_base = np.maximum(y - par.kappa, 0.0)
+        # Corrected multiplication *
+        G = par.N * par.zeta + np.sum(par.tau * par.w * sol.pi * sol.l)
 
-        T = (
-            par.N * par.zeta
-            + np.sum(par.tau * y)
-            + np.sum(par.omega * top_base)
-        )
-        return T
+        return G
 
     # --------------------------------------------------------
     # 5. Compute SWF = χ G^η + Σ U_i
@@ -165,4 +134,5 @@ class GovernmentClass(WorkerClass):
         if G < 0:
             return np.nan
 
-        return par.chi * (G ** par.eta) + np.sum(sol.U)
+        SWF_value = par.chi * (G ** par.eta) + np.sum(sol.U)
+        return SWF_value

@@ -493,7 +493,7 @@ class WorkerClass:
         ax.legend()
 
         ax = axes[1]
-        ax.plot(ell_left, phi_left, label=r'$\phi(\ell)$ før kink')
+        ax.plot(ell_left, phi_left, label=r'$\phi(\ell)$ before kink')
         ax.axhline(0, color='black', linewidth=1)
         ax.axvline(ell_k, color='grey', linestyle='--', label='kink ℓ_k')
         ax.set_xlabel(r'Labor supply $\ell$')
@@ -503,7 +503,7 @@ class WorkerClass:
         ax.legend()
 
         ax = axes[2]
-        ax.plot(ell_right, phi_right, label=r'$\phi(\ell)$ efter kink')
+        ax.plot(ell_right, phi_right, label=r'$\phi(\ell)$ after kink')
         ax.axhline(0, color='black', linewidth=1)
         ax.axvline(ell_k, color='grey', linestyle='--', label='kink ℓ_k')
         ax.set_xlabel(r'Labor supply $\ell$')
