@@ -198,9 +198,7 @@ class ExchangeEconomyModelClass:
 
         return eps1,eps2
   
-    def solve_walras(self,p_guess,print_output=True,method='tatonnement'):
-        
-        raise NotImplementedError
+    
     
     # --------------------------------------------------
     # New part of the code written at the exam
@@ -283,4 +281,21 @@ class ExchangeEconomyModelClass:
             p_seq.append(p)
 
         return np.array(p_seq), np.array(e_seq)
+
+    # --------------------------------------------------
+    # Solver for Walras equilibrium
+    # --------------------------------------------------
+    def solve_walras(self, p_guess, method='tatonnement'):
+
+        if method == 'tatonnement':
+            p_seq, e_seq = self.tatonnement(p_guess)
+
+        elif method == 'newton':
+            p_seq, e_seq = self.newton_damped(p_guess)
+
+        else:
+            raise ValueError("Unknown method")
+
+        return p_seq[-1]
+
 
