@@ -201,3 +201,86 @@ class ExchangeEconomyModelClass:
     def solve_walras(self,p_guess,print_output=True,method='tatonnement'):
         
         raise NotImplementedError
+    
+    # --------------------------------------------------
+    # New part of the code written at the exam
+    # --------------------------------------------------
+
+
+    # --------------------------------------------------
+    # Excess demand for good 1
+    # --------------------------------------------------
+    def eps1_fun(self, p1):
+       
+        eps1, _ = self.check_market_clearing(p1)
+        return eps1
+
+    # --------------------------------------------------
+    #  Tatonnement algorithm
+    # --------------------------------------------------
+    def tatonnement(self, p1_0):
+
+        par = self.par
+    
+       # Guess p1^0 and set k=0
+        p = float(p1_0)
+        p_seq = [p]     
+        e_seq = []      
+        
+        for k in range(par.K):
+            # Calculate e1^k = eps1(p1^k)
+            e = self.eps1_fun(p)
+            e_seq.append(e)
+
+            # If |e| < tau stop and return p* = p^k
+            if abs(e) < par.tol:
+                break
+
+            # Update p1^{k+1} = p1^k + nu * e1^k
+            p = p + par.nu * e
+            p_seq.append(p)
+
+        #  Loop ends at K automatically
+        return np.array(p_seq), np.array(e_seq)
+    
+    # --------------------------------------------------
+    # Dampened Newton–Raphson algorithm
+    # --------------------------------------------------
+    
+    def newton_damped(self, p1_0, h=1e-6):
+
+        par = self.par
+
+        p = float(p1_0)
+        p_seq = [p]
+        e_seq = []
+
+        for k in range(par.K):
+
+            # excess demand
+            e = self.eps1_fun(p)
+            e_seq.append(e)
+
+            # convergence
+            if abs(e) < par.tol:
+                break
+
+            # numerical derivative
+            Delta = (self.eps1_fun(p + h) - e) / h
+
+            # avoid division by ~0
+            if abs(Delta) < 1e-14:
+                break
+
+            # dampened Newton update (uses par.varphi)
+            p_new = p - par.varphi * (e / Delta)
+
+            # keep price positive (uses par.iota)
+            if p_new < 0:
+                p_new = par.iota * p
+
+            p = p_new
+            p_seq.append(p)
+
+        return np.array(p_seq), np.array(e_seq)
+
